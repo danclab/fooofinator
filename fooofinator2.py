@@ -18,7 +18,7 @@ from fooof.plts.fg import plot_fg
 from fooof.sim.gen import gen_aperiodic, gen_periodic
 from joblib import Parallel, delayed
 from scipy.stats import norm
-
+import copy
 
 def total_overlap(params):
     total_overlap = 0
