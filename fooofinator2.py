@@ -151,6 +151,12 @@ def fit_psd(freqs, psd, max_n_peaks=5, alpha=.3, n_runs=50, n_jobs=-1, peak_widt
 
 class FOOOFinator(FOOOF):
 
+    def __init__(self, peak_width_limits=(0.5, 12.0), max_n_peaks=np.inf, min_peak_height=0.0,
+                 peak_threshold=2.0, aperiodic_mode='fixed', verbose=True):
+        super().__init__(peak_width_limits=peak_width_limits, max_n_peaks=max_n_peaks, min_peak_height=min_peak_height,
+                         peak_threshold=peak_threshold, aperiodic_mode=aperiodic_mode, verbose=verbose)
+        self._bw_std_edge = 0
+
     def fit(self, freqs=None, power_spectrum=None, freq_range=None, n_jobs=-1):
         """Fit the full power spectrum as a combination of periodic and aperiodic components using the median
         of aperidioc fits done over a range of frequencies.
