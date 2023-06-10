@@ -372,9 +372,6 @@ class FOOOFinator(FOOOF):
                 self._calc_error()
 
 
-            print(last_err - self.error_)
-
-
             # Calculate R^2 and error of the model fit
             self._calc_r_squared()
             self._calc_error()
