@@ -204,7 +204,10 @@ class FOOOFinator(FOOOF):
 
         # In rare cases, the model fails to fit, and so uses try / except
         try:
-            best_params, all_aics = fit_psd(freqs, orig_spectrum, max_n_peaks=6, alpha=0.3)
+            best_params, all_aics = fit_psd(freqs, orig_spectrum,
+                                            min_peak_height=self.min_peak_height,
+                                            peak_width_limits=self.peak_width_limits,
+                                            max_n_peaks=10)
 
             offset = best_params[0]
             slope = best_params[1]
