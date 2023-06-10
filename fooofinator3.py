@@ -342,7 +342,7 @@ class FOOOFinator(FOOOF):
 
             last_err=np.inf
             self.error_=10000
-            while last_err-self.error_>1e-10:
+            while last_err-self.error_>1e-6:
                 print(last_err-self.error_)
 
                 # Flatten the power spectrum using fit aperiodic fit
