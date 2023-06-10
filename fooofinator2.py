@@ -143,7 +143,7 @@ def fit_psd(freqs, psd, max_n_peaks=5, alpha=.3, n_runs=50, n_jobs=-1, peak_widt
         prev_params = local_best_params.tolist()
         print('{} AIC={}'.format(n, aic))
         all_aics.append(aic)
-        if n > 0 and aic > all_aics[n - 1]:
+        if n > 1 and aic > all_aics[n - 1]:
             break
         best_params = local_best_params
     return best_params, all_aics
