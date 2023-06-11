@@ -1,3 +1,4 @@
+import copy
 import warnings
 
 import numpy as np
@@ -159,16 +160,24 @@ class FOOOFinator(FOOOF):
                          peak_threshold=peak_threshold, aperiodic_mode=aperiodic_mode, verbose=verbose)
         self._bw_std_edge = 0
         self._ap_bounds = ((-np.inf, -np.inf, -np.inf, 0), (np.inf, np.inf, np.inf, np.inf))
-        self._ap_guess = (None, 0, None, 0)
+        self._ap_guess = (None, 0, None, 1)
 
-    def _full_fit(self, freqs, power_spectrum, aperiodic_params, gaussian_params):
+    def _full_fit(self, freqs, power_spectrum, aperiodic_params, gaussian_params, alpha=.3):
         # Fit log PSD
         fit_target = power_spectrum
 
         # Compute error for given params
         def err_func(params):
 
-            spec = gen_periodic(freqs, np.ndarray.flatten(gaussian_params))+gen_aperiodic(freqs,params,self.aperiodic_mode)
+            if self.aperiodic_mode=='fixed':
+                aper_params=params[:3]
+                per_params=params[3:]
+            else:
+                aper_params=params[:4]
+                per_params=params[4:]
+            gaus_params=copy.copy(gaussian_params)
+            gaus_params[:,1]=per_params
+            spec = gen_periodic(freqs, np.ndarray.flatten(gaus_params))+gen_aperiodic(freqs,aper_params,self.aperiodic_mode)
 
             # Check for NaNs or overlapping Gaussians
             # if np.any(np.isnan(spec)) or check_gaussian_overlap(params):
@@ -176,12 +185,13 @@ class FOOOFinator(FOOOF):
                 return 1000000
 
             err = np.sqrt(np.sum(np.power(spec - fit_target, 2)))
+            cost = np.sum(per_params)
 
-            return err
+            return err + alpha * cost
 
         # Fit
         #xopt = scipy.optimize.minimize(err_func, aperiodic_params, method='SLSQP', options={'disp': False})
-        xopt = scipy.optimize.minimize(err_func, aperiodic_params, options={'disp': False})
+        xopt = scipy.optimize.minimize(err_func, np.hstack([aperiodic_params,gaussian_params[:,1].T]), options={'disp': False})
         return xopt.x
 
     def _simple_ap_fit(self, freqs, power_spectrum):
@@ -342,8 +352,11 @@ class FOOOFinator(FOOOF):
 
             last_err=np.inf
             self.error_=10000
-            while last_err-self.error_>1e-6:
-                print(last_err-self.error_)
+            max_iter=100
+            delta_thresh=1e-6
+            for i in range(max_iter):
+                if np.abs(last_err-self.error_)<delta_thresh:
+                    break
 
                 # Flatten the power spectrum using fit aperiodic fit
                 self._spectrum_flat = self.power_spectrum - self._ap_fit
@@ -355,8 +368,12 @@ class FOOOFinator(FOOOF):
                 #   Note: if no peaks are found, this creates a flat (all zero) peak fit
                 self._peak_fit = gen_periodic(self.freqs, np.ndarray.flatten(self.gaussian_params_))
 
-                self.aperiodic_params_ = self._full_fit(self.freqs, self.power_spectrum, self.aperiodic_params_,
-                                                        self.gaussian_params_)
+                full_params = self._full_fit(self.freqs, self.power_spectrum, self.aperiodic_params_,
+                                             self.gaussian_params_)
+                if self.aperiodic_mode=='fixed':
+                    self.aperiodic_params_=full_params[:3]
+                else:
+                    self.aperiodic_params_=full_params[:4]
                 self._ap_fit = gen_aperiodic(self.freqs, self.aperiodic_params_, self.aperiodic_mode)
 
                 # Create full power_spectrum model fit
@@ -392,11 +409,10 @@ class FOOOFinator(FOOOF):
 
 
 if __name__=='__main__':
-    fname = 'psd_20190917_L_M1_1.npz'
-    # fname = 'psd_20180528_R_M1_2.npz'
+    fname = 'test_psd.npz'
     psd_data = np.load(fname, allow_pickle=True)
     freqs = psd_data['freqs']
-    psd = psd_data['psd'][0, :]
+    psd = psd_data['psd']
     f = FOOOFinator(aperiodic_mode='fixed')
     f.fit(freqs, psd)
     f.plot(plot_peaks='shade', peak_kwargs={'color': 'green'})
