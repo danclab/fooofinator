@@ -1,6 +1,5 @@
 import copy
 import warnings
-
 import numpy as np
 from fooof import FOOOF
 from fooof.core.errors import NoDataError, FitError, InconsistentDataError
@@ -175,9 +174,7 @@ class FOOOFinator(FOOOF):
             else:
                 aper_params=params[:4]
                 per_params=params[4:]
-            gaus_params=copy.copy(gaussian_params)
-            gaus_params[:,1]=per_params
-            spec = gen_periodic(freqs, np.ndarray.flatten(gaus_params))+gen_aperiodic(freqs,aper_params,self.aperiodic_mode)
+            spec = gen_periodic(freqs, per_params)+gen_aperiodic(freqs,aper_params,self.aperiodic_mode)
 
             # Check for NaNs or overlapping Gaussians
             # if np.any(np.isnan(spec)) or check_gaussian_overlap(params):
@@ -185,13 +182,18 @@ class FOOOFinator(FOOOF):
                 return 1000000
 
             err = np.sqrt(np.sum(np.power(spec - fit_target, 2)))
-            cost = np.sum(per_params)
+            cost = np.sum(per_params[1::3])
 
             return err + alpha * cost
 
         # Fit
-        #xopt = scipy.optimize.minimize(err_func, aperiodic_params, method='SLSQP', options={'disp': False})
-        xopt = scipy.optimize.minimize(err_func, np.hstack([aperiodic_params,gaussian_params[:,1].T]), options={'disp': False})
+        bounds = [(None, None), (None, None), (1e-6, None)]
+        if self.aperiodic_mode=='knee':
+            bounds.append((None,None))
+        for i in range(gaussian_params.shape[0]):
+            bounds.extend([(freqs[0], freqs[-1]), (1e-6, None), (1e-6, None)])
+        xopt = scipy.optimize.minimize(err_func, np.hstack([aperiodic_params,np.ndarray.flatten(gaussian_params)]),
+                                       method='SLSQP', bounds=bounds, options={'disp': False})
         return xopt.x
 
     def _simple_ap_fit(self, freqs, power_spectrum):
@@ -300,7 +302,7 @@ class FOOOFinator(FOOOF):
 
         return aperiodic_params
 
-    def fit(self, freqs=None, power_spectrum=None, freq_range=None, n_jobs=-1):
+    def fit(self, freqs=None, power_spectrum=None, freq_range=None, alpha=0.3, n_jobs=-1):
         """Fit the full power spectrum as a combination of periodic and aperiodic components using the median
         of aperidioc fits done over a range of frequencies.
 
@@ -352,24 +354,28 @@ class FOOOFinator(FOOOF):
 
             last_err=np.inf
             self.error_=10000
-            max_iter=100
-            delta_thresh=1e-6
+            max_iter=10
+            delta_thresh=1e-3
+            max_peaks_to_consider=1
             for i in range(max_iter):
                 if np.abs(last_err-self.error_)<delta_thresh:
                     break
+                print(np.abs(last_err-self.error_))
 
                 # Flatten the power spectrum using fit aperiodic fit
                 self._spectrum_flat = self.power_spectrum - self._ap_fit
 
                 # Find peaks, and fit them with gaussians
                 self.gaussian_params_ = self._fit_peaks(np.copy(self._spectrum_flat))
+                if self.gaussian_params_.shape[0]>max_peaks_to_consider:
+                    self.gaussian_params_ = self.gaussian_params_[:max_peaks_to_consider]
 
                 # Calculate the peak fit
                 #   Note: if no peaks are found, this creates a flat (all zero) peak fit
                 self._peak_fit = gen_periodic(self.freqs, np.ndarray.flatten(self.gaussian_params_))
 
                 full_params = self._full_fit(self.freqs, self.power_spectrum, self.aperiodic_params_,
-                                             self.gaussian_params_)
+                                             self.gaussian_params_, alpha=alpha)
                 if self.aperiodic_mode=='fixed':
                     self.aperiodic_params_=full_params[:3]
                 else:
@@ -388,6 +394,8 @@ class FOOOFinator(FOOOF):
                 last_err = self.error_
                 self._calc_error()
 
+                if max_peaks_to_consider<self.max_n_peaks-1:
+                    max_peaks_to_consider=max_peaks_to_consider+1
 
             # Calculate R^2 and error of the model fit
             self._calc_r_squared()
@@ -407,12 +415,3 @@ class FOOOFinator(FOOOF):
             if self.verbose:
                 print("Model fitting was unsuccessful.")
 
-
-if __name__=='__main__':
-    fname = 'test_psd.npz'
-    psd_data = np.load(fname, allow_pickle=True)
-    freqs = psd_data['freqs']
-    psd = psd_data['psd']
-    f = FOOOFinator(aperiodic_mode='fixed')
-    f.fit(freqs, psd)
-    f.plot(plot_peaks='shade', peak_kwargs={'color': 'green'})
